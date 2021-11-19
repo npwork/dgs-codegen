@@ -32,9 +32,13 @@ abstract class BaseProjectionNode(
     val schemaType: Optional<String> = Optional.empty()
 ) {
 
-    val fields: MutableMap<String, Any?> = LinkedHashMap()
-    val fragments: MutableList<BaseSubProjectionNode<*, *>> = LinkedList()
-    val inputArguments: MutableMap<String, List<InputArgument>> = LinkedHashMap()
+    protected val fields: MutableMap<String, Any?> = LinkedHashMap()
+    protected val fragments: MutableList<BaseSubProjectionNode<*, *>> = LinkedList()
+    protected val inputArguments: MutableMap<String, List<InputArgument>> = LinkedHashMap()
+
+    internal fun getFields() = this.fields
+    internal fun getFragments() = this.fragments
+    internal fun getInputArguments() = this.inputArguments
 
     data class InputArgument(val name: String, val value: Any)
 }

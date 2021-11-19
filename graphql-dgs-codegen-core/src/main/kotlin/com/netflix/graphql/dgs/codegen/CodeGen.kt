@@ -264,7 +264,7 @@ class CodeGen(private val config: CodeGenConfig) {
 
         val constantsClass = KotlinConstantsGenerator(config, document).generate()
 
-        val client = generateJavaClientApi(definitions)
+        val client = generateKotlinClientApi(definitions)
         val entitiesClient = generateJavaClientEntitiesApi(definitions)
         val entitiesRepresentationsTypes = generateKotlinClientEntitiesRepresentations(definitions)
 
@@ -281,6 +281,16 @@ class CodeGen(private val config: CodeGenConfig) {
                 .map { d ->
                     KotlinEntitiesRepresentationTypeGenerator(config, document).generate(d, generatedRepresentations)
                 }.fold(CodeGenResult()) { t: CodeGenResult, u: CodeGenResult -> t.merge(u) }
+        } else CodeGenResult()
+    }
+
+    private fun generateKotlinClientApi(definitions: Collection<Definition<*>>): CodeGenResult {
+        return if (config.generateClientApi) {
+            definitions.asSequence()
+                .filterIsInstance<ObjectTypeDefinition>()
+                //.filter { it.name == "Query" || it.name == "Mutation" || it.name == "Subscription" }
+                .map { KotlinClientApiGenerator(config, document).generate(it) }
+                .fold(CodeGenResult()) { t: CodeGenResult, u: CodeGenResult -> t.merge(u) }
         } else CodeGenResult()
     }
 
@@ -385,7 +395,9 @@ data class CodeGenResult(
     val kotlinInterfaces: List<FileSpec> = listOf(),
     val kotlinEnumTypes: List<FileSpec> = listOf(),
     val kotlinDataFetchers: List<FileSpec> = listOf(),
-    val kotlinConstants: List<FileSpec> = emptyList()
+    val kotlinClientProjections: List<FileSpec> = listOf(),
+    val kotlinQueryTypes: List<FileSpec> = listOf(),
+    val kotlinConstants: List<FileSpec> = emptyList(),
 ) {
     fun merge(current: CodeGenResult): CodeGenResult {
         val javaDataTypes = this.javaDataTypes.plus(current.javaDataTypes)
@@ -399,6 +411,8 @@ data class CodeGenResult(
         val kotlinInterfaces = this.kotlinInterfaces.plus(current.kotlinInterfaces)
         val kotlinEnumTypes = this.kotlinEnumTypes.plus(current.kotlinEnumTypes)
         val kotlinDataFetchers = this.kotlinDataFetchers.plus(current.kotlinDataFetchers)
+        val kotlinClientProjections = this.kotlinClientProjections.plus(current.kotlinClientProjections)
+        val kotlinQueryTypes = this.kotlinQueryTypes.plus(current.kotlinQueryTypes)
         val kotlinConstants = this.kotlinConstants.plus(current.kotlinConstants)
 
         return CodeGenResult(
@@ -413,6 +427,8 @@ data class CodeGenResult(
             kotlinInterfaces = kotlinInterfaces,
             kotlinEnumTypes = kotlinEnumTypes,
             kotlinDataFetchers = kotlinDataFetchers,
+            kotlinQueryTypes = kotlinQueryTypes,
+            kotlinClientProjections = kotlinClientProjections,
             kotlinConstants = kotlinConstants
         )
     }

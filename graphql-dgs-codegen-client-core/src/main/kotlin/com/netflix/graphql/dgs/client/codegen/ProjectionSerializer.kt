@@ -21,7 +21,7 @@ import java.util.*
 class ProjectionSerializer(private val inputValueSerializer: InputValueSerializer) {
 
     fun serialize(projection: BaseProjectionNode, isFragment: Boolean = false): String {
-        if (projection.fields.isEmpty() && projection.fragments.isEmpty()) {
+        if (projection.getFields().isEmpty() && projection.getFragments().isEmpty()) {
             return ""
         }
 
@@ -38,10 +38,10 @@ class ProjectionSerializer(private val inputValueSerializer: InputValueSerialize
         }
 
         val joiner = StringJoiner(" ", prefix, " }")
-        projection.fields.forEach { (key, value) ->
-            val field = if (projection.inputArguments[key] != null) {
+        projection.getFields().forEach { (key, value) ->
+            val field = if (projection.getInputArguments()[key] != null) {
                 val inputArgsJoiner = StringJoiner(", ", "(", ")")
-                projection.inputArguments[key]?.forEach {
+                projection.getInputArguments()[key]?.forEach {
                     inputArgsJoiner.add("${it.name}: ${inputValueSerializer.serialize(it.value)}")
                 }
 
@@ -60,7 +60,7 @@ class ProjectionSerializer(private val inputValueSerializer: InputValueSerialize
             }
         }
 
-        projection.fragments.forEach { joiner.add(serialize(it, true)) }
+        projection.getFragments().forEach { joiner.add(serialize(it, true)) }
 
         return joiner.toString()
     }
