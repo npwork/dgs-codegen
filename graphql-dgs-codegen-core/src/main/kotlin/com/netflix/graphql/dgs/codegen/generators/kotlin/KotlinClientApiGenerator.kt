@@ -31,20 +31,48 @@ class KotlinClientApiGenerator(private val config: CodeGenConfig, private val do
 
     fun generate(definition: ObjectTypeDefinition): CodeGenResult {
         return definition.fieldDefinitions.filterIncludedInConfig(definition.name, config).filterSkipped().map {
-            val kotlinFile = createQueryBuilderClass(it, definition.name)
+            val typeDef = it.type.findTypeDefinition(
+                document,
+                excludeExtensions = true,
+                includeBaseTypes = it.inputValueDefinitions.isNotEmpty(),
+                includeScalarTypes = it.inputValueDefinitions.isNotEmpty()
+            )
 
             val rootProjection =
                 it.type.findTypeDefinition(document, true)
-                    ?.let { typeDefinition -> createProjection(typeDefinition, it.name.capitalized()) }
+                    ?.let { typeDefinition -> createProjection(typeDefinition, typeDef!!.name.capitalized()) }
                     ?: CodeGenResult()
-            CodeGenResult(kotlinQueryTypes = listOf(kotlinFile)).merge(rootProjection)
+
+            val a = typeUtils.findReturnType(it.type)
+
+            if (definition.name == "Query") {
+                val kotlinFile = createQueryContext(it, definition.name)
+                CodeGenResult(kotlinQueryTypes = listOf(kotlinFile)).merge(rootProjection)
+            } else {
+                CodeGenResult().merge(rootProjection)
+            }
         }.fold(CodeGenResult()) { total, current -> total.merge(current) }
     }
 
-    private fun createQueryBuilderClass(it: FieldDefinition, operation: String): FileSpec {
-        val typeSpec = TypeSpec.classBuilder("${it.name.capitalized()}GraphQLQueryBuilder")
-            .build()
+    private fun createQueryContext(it: FieldDefinition, operation: String): FileSpec {
+        val className = "QueryProjection"
+        val kotlinType = TypeSpec.classBuilder(className)
+            .addAnnotation(DgsDslContext::class)
+            .superclass(BaseProjectionNode::class)
 
+        val subProjectionType = it.type.findTypeDefinition(document)
+
+        if (subProjectionType != null) {
+            val subProjectionTypeClassName =
+                ClassName(
+                    getPackageName(),
+                    ReservedKeywordSanitizer.sanitize("${subProjectionType.name.capitalized()}Projection")
+                )
+
+            kotlinType.addFunction(createSubProjectionFunction(className, it.name, subProjectionTypeClassName))
+        }
+
+        val typeSpec = kotlinType.build()
         val fileSpec = FileSpec.builder(getPackageName(), typeSpec.name!!).addType(typeSpec).build()
 
         return fileSpec
@@ -61,12 +89,12 @@ class KotlinClientApiGenerator(private val config: CodeGenConfig, private val do
     }
 
     private fun createProjection(type: TypeDefinition<*>, prefix: String): CodeGenResult {
-        val clazzName = "${prefix}Projection"
-        val kotlinType = TypeSpec.classBuilder(clazzName)
+        val className = "${prefix}Projection"
+        val kotlinType = TypeSpec.classBuilder(className)
             .addAnnotation(DgsDslContext::class)
             .superclass(BaseProjectionNode::class)
 
-        if (generatedClasses.contains(clazzName)) return CodeGenResult() else generatedClasses.add(clazzName)
+        if (generatedClasses.contains(className)) return CodeGenResult() else generatedClasses.add(className)
 
         val fieldDefinitions =
             type.fieldDefinitions() + document.definitions.filterIsInstance<ObjectTypeExtensionDefinition>()
@@ -96,47 +124,34 @@ class KotlinClientApiGenerator(private val config: CodeGenConfig, private val do
                         ReservedKeywordSanitizer.sanitize("${typeDef.name.capitalized()}Projection")
                     )
 
-                kotlinType.addFunction(
-                    FunSpec.builder(fieldDef.name)
-                        .addParameter(
-                            ParameterSpec
-                                .builder("initBlock", LambdaTypeName.get(receiver = subProjectionType, returnType = UNIT))
-                                .build()
-                        )
-                        .returns(subProjectionType)
-                        .addCode("return %T().apply {\n", subProjectionType)
-                        .addStatement("fields[%S] = this", fieldDef.name)
-                        .addStatement("initBlock()")
-                        .addCode("}")
-                        .build()
-                )
+                kotlinType.addFunction(createSubProjectionFunction(className, fieldDef.name, subProjectionType))
 
                 println("SUB PROJECTION")
-               /* val projectionName = "${prefix}_${fieldDef.name.capitalized()}Projection"
+                /* val projectionName = "${prefix}_${fieldDef.name.capitalized()}Projection"
 
-                if (typeDef !is ScalarTypeDefinition) {
-                    val noArgMethodBuilder = FunSpec.builder(ReservedKeywordSanitizer.sanitize(fieldDef.name))
-                        //.returns(ClassName.get(getPackageName(), projectionName))
-                        .returns(Unit::class.java)
-                        .addCode(
-                            """
-                            |$projectionName projection = new $projectionName(this, this);
-                            |getFields().put("${fieldDef.name}", projection);
-                            |return projection;
-                            """.trimMargin()
-                        )
-                        .addModifiers(KModifier.PUBLIC)
-                    kotlinType.addFunction(noArgMethodBuilder.build())
-                }
+                 if (typeDef !is ScalarTypeDefinition) {
+                     val noArgMethodBuilder = FunSpec.builder(ReservedKeywordSanitizer.sanitize(fieldDef.name))
+                         //.returns(ClassName.get(getPackageName(), projectionName))
+                         .returns(Unit::class.java)
+                         .addCode(
+                             """
+                             |$projectionName projection = new $projectionName(this, this);
+                             |getFields().put("${fieldDef.name}", projection);
+                             |return projection;
+                             """.trimMargin()
+                         )
+                         .addModifiers(KModifier.PUBLIC)
+                     kotlinType.addFunction(noArgMethodBuilder.build())
+                 }
 
-                if (fieldDef.inputValueDefinitions.isNotEmpty()) {
-                    println("PARAMS?")
-                    //addFieldSelectionMethodWithArguments(fieldDef, projectionName, javaType, projectionRoot = "this")
-                }
+                 if (fieldDef.inputValueDefinitions.isNotEmpty()) {
+                     println("PARAMS?")
+                     //addFieldSelectionMethodWithArguments(fieldDef, projectionName, javaType, projectionRoot = "this")
+                 }
 
-                val processedEdges = mutableSetOf<Pair<String, String>>()
-                processedEdges.add(typeDef.name to type.name)
-                println("SUBPROJ")*/
+                 val processedEdges = mutableSetOf<Pair<String, String>>()
+                 processedEdges.add(typeDef.name to type.name)
+                 println("SUBPROJ")*/
                 CodeGenResult()
                 //createSubProjection(typeDef, javaType.build(), javaType.build(), "${prefix}_${fieldDef.name.capitalized()}", processedEdges, 1)
             }
@@ -163,6 +178,24 @@ class KotlinClientApiGenerator(private val config: CodeGenConfig, private val do
         return CodeGenResult(kotlinClientProjections = listOf(fileSpec)).merge(codeGenResult)
         //.merge(concreteTypesResult).merge(unionTypesResult)
     }
+
+    private fun createSubProjectionFunction(
+        className: String,
+        fieldName: String,
+        subProjectionType: ClassName
+    ) = FunSpec.builder(fieldName)
+        .addParameter(
+            ParameterSpec
+                .builder("initBlock", LambdaTypeName.get(receiver = subProjectionType, returnType = UNIT))
+                .build()
+        )
+            // this@QueryProjection
+        .returns(subProjectionType)
+        .addCode("return %T().apply {\n", subProjectionType)
+        .addStatement("this@%T.fields[%S] = this", ClassName("", className), fieldName)
+        .addStatement("initBlock()")
+        .addCode("}")
+        .build()
 
     private fun getPackageName(): String {
         return config.packageNameClient

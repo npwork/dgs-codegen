@@ -22,6 +22,7 @@ import com.netflix.graphql.dgs.client.codegen.BaseProjectionNode
 import com.netflix.graphql.dgs.codegen.CodeGen
 import com.netflix.graphql.dgs.codegen.CodeGenConfig
 import com.netflix.graphql.dgs.codegen.Language
+import com.netflix.graphql.dgs.codegen.assertCompilesKotlin
 import com.netflix.graphql.dgs.codegen.generators.kotlin.DgsDslContext
 import com.squareup.kotlinpoet.*
 import org.assertj.core.api.Assertions.assertThat
@@ -47,7 +48,8 @@ import org.junit.jupiter.api.Test
 
 class KotlinClientApiGenTest {
     companion object {
-        const val PEOPLE_PROJECTION_NAME = "PeopleProjection"
+        const val ROOT_QUERY_PROJECTION_NAME = "QueryProjection"
+        const val PEOPLE_PROJECTION_NAME = "PersonProjection"
         const val ADDRESS_PROJECTION_NAME = "AddressProjection"
         const val BASE_PACKAGE = "com.netflix.graphql.dgs.codegen.tests.generated"
         const val CLIENT_PACKAGE = "$BASE_PACKAGE.client"
@@ -76,8 +78,17 @@ class KotlinClientApiGenTest {
         ).generate()
 
         assertThat(codeGenResult.kotlinQueryTypes.size).isEqualTo(1)
-        //assertThat(codeGenResult.kotlinQueryTypes[0].name).isEqualTo("PeopleGraphQLQuery")
-
+        verifyProjection(
+            codeGenResult.kotlinQueryTypes[0],
+            className = ROOT_QUERY_PROJECTION_NAME,
+            expectedFunctions = listOf(
+                innerProjectionFun(
+                    ROOT_QUERY_PROJECTION_NAME,
+                    "people",
+                    ClassName(CLIENT_PACKAGE, PEOPLE_PROJECTION_NAME)
+                ),
+            )
+        )
 
         assertThat(codeGenResult.kotlinClientProjections).hasSize(1)
         assertThat(codeGenResult.kotlinClientProjections.first().name).isEqualTo(PEOPLE_PROJECTION_NAME)
@@ -93,10 +104,7 @@ class KotlinClientApiGenTest {
             )
         )
 
-        /*assertThat(codeGenResult.kotlinClientProjections.first().typeSpec.name).isEqualTo("PeopleProjection")
-        assertThat(codeGenResult.kotlinClientProjections.first().typeSpec.).isEqualTo("PeopleProjection")*/
-
-        //assertCompilesKotlin(codeGenResult.kotlinClientProjections + codeGenResult.kotlinQueryTypes)
+        assertCompilesKotlin(codeGenResult.kotlinClientProjections + codeGenResult.kotlinQueryTypes)
     }
 
     @Test
@@ -139,7 +147,11 @@ class KotlinClientApiGenTest {
             peopleProjection,
             className = PEOPLE_PROJECTION_NAME,
             expectedFunctions = listOf(
-                innerProjectionFun("address", ClassName(CLIENT_PACKAGE, ADDRESS_PROJECTION_NAME)),
+                innerProjectionFun(
+                    PEOPLE_PROJECTION_NAME,
+                    "address",
+                    ClassName(CLIENT_PACKAGE, ADDRESS_PROJECTION_NAME)
+                ),
                 simpleTypeProjectionFun("firstname"),
                 simpleTypeProjectionFun("lastname"),
             )
@@ -160,7 +172,7 @@ class KotlinClientApiGenTest {
         //assertCompilesKotlin(codeGenResult.kotlinClientProjections + codeGenResult.kotlinQueryTypes)
     }
 
-    private fun innerProjectionFun(fieldName: String, subProjectionType: ClassName): FunSpec {
+    private fun innerProjectionFun(className: String, fieldName: String, subProjectionType: ClassName): FunSpec {
         return FunSpec.builder(fieldName)
             .addParameter(
                 ParameterSpec
@@ -169,7 +181,7 @@ class KotlinClientApiGenTest {
             )
             .returns(subProjectionType)
             .addCode("return %T().apply {\n", subProjectionType)
-            .addStatement("fields[%S] = this", fieldName)
+            .addStatement("this@%T.fields[%S] = this", ClassName("", className), fieldName)
             .addStatement("initBlock()")
             .addCode("}")
             .build()

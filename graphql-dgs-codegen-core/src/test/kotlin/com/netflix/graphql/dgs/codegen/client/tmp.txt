@@ -1,10 +1,7 @@
-public fun address(initBlock: com.netflix.graphql.dgs.codegen.tests.generated.types.AddressProjection.() -> kotlin.Unit): com.netflix.graphql.dgs.codegen.tests.generated.types.AddressProjection = com.netflix.graphql.dgs.codegen.tests.generated.types.AddressProjection().apply {
-fields["address"] = this
-initBlock()
-}
-
-
-public fun address(initBlock: com.netflix.graphql.dgs.codegen.tests.generated.AddressProjection.() -> kotlin.Unit): com.netflix.graphql.dgs.codegen.tests.generated.AddressProjection = com.netflix.graphql.dgs.codegen.tests.generated.AddressProjection().apply {
-fields["address"] = this
-initBlock()
+@com.netflix.graphql.dgs.codegen.generators.kotlin.DgsDslContext
+public class QueryProjection : com.netflix.graphql.dgs.client.codegen.BaseProjectionNode() {
+  public fun people(initBlock: com.netflix.graphql.dgs.codegen.tests.generated.client.PersonProjection.() -> kotlin.Unit): com.netflix.graphql.dgs.codegen.tests.generated.client.PersonProjection = com.netflix.graphql.dgs.codegen.tests.generated.client.PersonProjection().apply {
+  fields["people"] = this
+  initBlock()
+  }
 }
