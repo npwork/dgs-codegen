@@ -22,7 +22,7 @@ import com.netflix.graphql.dgs.client.codegen.BaseProjectionNode
 import com.netflix.graphql.dgs.codegen.CodeGen
 import com.netflix.graphql.dgs.codegen.CodeGenConfig
 import com.netflix.graphql.dgs.codegen.Language
-import com.netflix.graphql.dgs.codegen.generators.kotlin.DslMarkerContext
+import com.netflix.graphql.dgs.codegen.generators.kotlin.DgsDslContext
 import com.squareup.kotlinpoet.*
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
@@ -46,7 +46,12 @@ import org.junit.jupiter.api.Test
  */
 
 class KotlinClientApiGenTest {
-    private val basePackageName = "com.netflix.graphql.dgs.codegen.tests.generated"
+    companion object {
+        const val PEOPLE_PROJECTION_NAME = "PeopleProjection"
+        const val ADDRESS_PROJECTION_NAME = "AddressProjection"
+        const val BASE_PACKAGE = "com.netflix.graphql.dgs.codegen.tests.generated"
+        const val CLIENT_PACKAGE = "$BASE_PACKAGE.client"
+    }
 
     @Test
     fun `one level projection`() {
@@ -64,7 +69,7 @@ class KotlinClientApiGenTest {
         val codeGenResult = CodeGen(
             CodeGenConfig(
                 schemas = setOf(schema),
-                packageName = basePackageName,
+                packageName = BASE_PACKAGE,
                 language = Language.KOTLIN,
                 generateClientApi = true,
             )
@@ -75,20 +80,16 @@ class KotlinClientApiGenTest {
 
 
         assertThat(codeGenResult.kotlinClientProjections).hasSize(1)
-        assertThat(codeGenResult.kotlinClientProjections.first().name).isEqualTo("PeopleProjection")
+        assertThat(codeGenResult.kotlinClientProjections.first().name).isEqualTo(PEOPLE_PROJECTION_NAME)
 
-        val projection = codeGenResult.kotlinClientProjections[0]
+        val peopleProjection = codeGenResult.kotlinClientProjections[0]
 
         verifyProjection(
-            projection,
-            className = "PeopleProjection",
-            functions = listOf(
-                FunSpec.builder("firstname")
-                    .addStatement("fields[%S] = null", "firstname")
-                    .build(),
-                FunSpec.builder("lastname")
-                    .addStatement("fields[%S] = null", "lastname")
-                    .build()
+            peopleProjection,
+            className = PEOPLE_PROJECTION_NAME,
+            expectedFunctions = listOf(
+                simpleTypeProjectionFun("firstname"),
+                simpleTypeProjectionFun("lastname"),
             )
         )
 
@@ -120,47 +121,36 @@ class KotlinClientApiGenTest {
         val codeGenResult = CodeGen(
             CodeGenConfig(
                 schemas = setOf(schema),
-                packageName = basePackageName,
+                packageName = BASE_PACKAGE,
                 language = Language.KOTLIN,
                 generateClientApi = true,
             )
         ).generate()
-
-        //assertThat(codeGenResult.kotlinQueryTypes.size).isEqualTo(1)
-        //assertThat(codeGenResult.kotlinQueryTypes[0].name).isEqualTo("PeopleGraphQLQuery")
-
 
         assertThat(codeGenResult.kotlinClientProjections).hasSize(2)
 
         val peopleProjection = codeGenResult.kotlinClientProjections[0]
         val addressProjection = codeGenResult.kotlinClientProjections[1]
 
-        assertThat(peopleProjection.name).isEqualTo("PeopleProjection")
-        assertThat(addressProjection.name).isEqualTo("AddressProjection")
+        assertThat(peopleProjection.name).isEqualTo(PEOPLE_PROJECTION_NAME)
+        assertThat(addressProjection.name).isEqualTo(ADDRESS_PROJECTION_NAME)
 
         verifyProjection(
             peopleProjection,
-            className = "PeopleProjection",
-            functions = listOf(
-                FunSpec.builder("firstname")
-                    .addStatement("fields[%S] = null", "firstname")
-                    .build(),
-                FunSpec.builder("lastname")
-                    .addStatement("fields[%S] = null", "lastname")
-                    .build()
+            className = PEOPLE_PROJECTION_NAME,
+            expectedFunctions = listOf(
+                innerProjectionFun("address", ClassName(CLIENT_PACKAGE, ADDRESS_PROJECTION_NAME)),
+                simpleTypeProjectionFun("firstname"),
+                simpleTypeProjectionFun("lastname"),
             )
         )
 
         verifyProjection(
             addressProjection,
-            className = "AddressProjection",
-            functions = listOf(
-                FunSpec.builder("street")
-                    .addStatement("fields[%S] = null", "street")
-                    .build(),
-                FunSpec.builder("house")
-                    .addStatement("fields[%S] = null", "house")
-                    .build()
+            className = ADDRESS_PROJECTION_NAME,
+            expectedFunctions = listOf(
+                simpleTypeProjectionFun("street"),
+                simpleTypeProjectionFun("house"),
             )
         )
 
@@ -170,7 +160,28 @@ class KotlinClientApiGenTest {
         //assertCompilesKotlin(codeGenResult.kotlinClientProjections + codeGenResult.kotlinQueryTypes)
     }
 
-    private fun verifyProjection(projection: FileSpec, className: String, functions: List<FunSpec>) {
+    private fun innerProjectionFun(fieldName: String, subProjectionType: ClassName): FunSpec {
+        return FunSpec.builder(fieldName)
+            .addParameter(
+                ParameterSpec
+                    .builder("initBlock", LambdaTypeName.get(receiver = subProjectionType, returnType = UNIT))
+                    .build()
+            )
+            .returns(subProjectionType)
+            .addCode("return %T().apply {\n", subProjectionType)
+            .addStatement("fields[%S] = this", fieldName)
+            .addStatement("initBlock()")
+            .addCode("}")
+            .build()
+    }
+
+    private fun simpleTypeProjectionFun(fieldName: String): FunSpec {
+        return FunSpec.builder(fieldName)
+            .addStatement("fields[%S] = null", fieldName)
+            .build()
+    }
+
+    private fun verifyProjection(projection: FileSpec, className: String, expectedFunctions: List<FunSpec>) {
         val members = getMembersAsListOfTypeSpec(projection)
 
         assertThat(members).hasSize(1)
@@ -178,11 +189,11 @@ class KotlinClientApiGenTest {
         assertThat(members[0].name).isEqualTo(className)
         assertThat(members[0].superclass).isEqualTo(BaseProjectionNode::class.asTypeName())
 
-        assertThat(members[0].annotationSpecs).containsExactly(
-            AnnotationSpec.builder(DslMarkerContext::class).build()
+        assertThat(members[0].annotationSpecs).containsExactlyInAnyOrder(
+            AnnotationSpec.builder(DgsDslContext::class).build()
         )
 
-        assertThat(members[0].funSpecs).containsExactly(*functions.toTypedArray())
+        assertThat(members[0].funSpecs).containsExactlyInAnyOrder(*expectedFunctions.toTypedArray())
     }
 
     fun getMembersAsListOfTypeSpec(fileSpec: FileSpec): List<TypeSpec> {

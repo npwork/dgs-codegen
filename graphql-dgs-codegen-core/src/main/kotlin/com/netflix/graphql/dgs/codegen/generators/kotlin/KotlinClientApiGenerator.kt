@@ -63,7 +63,7 @@ class KotlinClientApiGenerator(private val config: CodeGenConfig, private val do
     private fun createProjection(type: TypeDefinition<*>, prefix: String): CodeGenResult {
         val clazzName = "${prefix}Projection"
         val kotlinType = TypeSpec.classBuilder(clazzName)
-            .addAnnotation(DslMarkerContext::class)
+            .addAnnotation(DgsDslContext::class)
             .superclass(BaseProjectionNode::class)
 
         if (generatedClasses.contains(clazzName)) return CodeGenResult() else generatedClasses.add(clazzName)
@@ -96,26 +96,17 @@ class KotlinClientApiGenerator(private val config: CodeGenConfig, private val do
                         ReservedKeywordSanitizer.sanitize("${typeDef.name.capitalized()}Projection")
                     )
 
-                val lambda = LambdaTypeName.get(receiver = subProjectionType, returnType = UNIT)
-
                 kotlinType.addFunction(
                     FunSpec.builder(fieldDef.name)
                         .addParameter(
                             ParameterSpec
-                                //.builder("init", String::class.asTypeName().copy(nullable = true))
-                                .builder("init", lambda)
+                                .builder("initBlock", LambdaTypeName.get(receiver = subProjectionType, returnType = UNIT))
                                 .build()
                         )
                         .returns(subProjectionType)
-                        /**
-                         * return MyTasks_FormProjection(this, this).apply {
-                        fields["form"] = this
-                        init()
-                        }
-                         */
-                        .addCode("return %T().apply {", subProjectionType)
+                        .addCode("return %T().apply {\n", subProjectionType)
                         .addStatement("fields[%S] = this", fieldDef.name)
-                        .addStatement("init()")
+                        .addStatement("initBlock()")
                         .addCode("}")
                         .build()
                 )
@@ -153,7 +144,6 @@ class KotlinClientApiGenerator(private val config: CodeGenConfig, private val do
 
         fieldDefinitions.filterSkipped().forEach {
             val objectTypeDefinition = it.type.findTypeDefinition(document)
-            // Primitive
             if (objectTypeDefinition == null) {
                 kotlinType.addFunction(
                     FunSpec.builder(ReservedKeywordSanitizer.sanitize(it.name))
@@ -175,9 +165,9 @@ class KotlinClientApiGenerator(private val config: CodeGenConfig, private val do
     }
 
     private fun getPackageName(): String {
-        return config.packageNameTypes
+        return config.packageNameClient
     }
 }
 
 @DslMarker
-annotation class DslMarkerContext
+annotation class DgsDslContext
