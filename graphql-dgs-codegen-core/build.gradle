@@ -23,7 +23,7 @@ plugins {
 
 
 dependencies {
-    implementation platform("com.netflix.graphql.dgs:graphql-dgs-platform-dependencies:latest.release")
+    implementation platform("com.netflix.graphql.dgs:graphql-dgs-platform-dependencies:4.9.24")
 
     implementation('com.netflix.graphql.dgs:graphql-dgs') { transitive = false }
     implementation(project(":graphql-dgs-codegen-client-core"))
