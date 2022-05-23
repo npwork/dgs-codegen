@@ -21,7 +21,7 @@ plugins {
 }
 
 dependencies {
-    implementation platform('com.netflix.graphql.dgs:graphql-dgs-platform-dependencies:latest.release')
+    implementation platform('com.netflix.graphql.dgs:graphql-dgs-platform-dependencies:4.10.3')
     compileOnly platform('com.netflix.graphql.dgs:graphql-dgs-platform-dependencies:latest.release')
     implementation "org.jetbrains.kotlin:kotlin-reflect"
     compileOnly 'com.graphql-java:graphql-java'
